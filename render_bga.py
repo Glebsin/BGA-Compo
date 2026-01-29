@@ -39,7 +39,6 @@ if not bme_path.exists():
 
 exe_dir = Path(sys.executable).parent
 
-# PyInstaller-safe embedded dir
 if hasattr(sys, "_MEIPASS"):
     embedded_dir = Path(sys._MEIPASS)
 else:

@@ -129,7 +129,6 @@ int main(int argc, char **argv)
       const char *name = chart.tables.bmp[i];
       if (!name || !name[0]) continue;
 
-      /* Skip non-BMP (dummy.GIF / PNG / JPG etc.) */
       if (!ends_with(name, ".bmp")) {
         fprintf(stderr, "Skipping non-BMP bitmap %s\n", name);
         continue;
