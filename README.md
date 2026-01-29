@@ -15,4 +15,4 @@ bga_compo_clean.exe - `gcc bga_compo.c bmflat.c stb_vorbis.c -O2 -o bga_compo_cl
 
 BGA_compo.exe - `python -m PyInstaller --onefile --add-binary "bga_compo_clean.exe;." --console render_bga.py`
 
-<sub><sup>ᵃˡˡ ᵗʰⁱˢ ˢʰⁱᵗ ᵐᵃᵈᵉ ᵇʸ ᵐᵉ ⁱˢ ᵈᵒⁿᵉ ʷⁱᵗʰ ᶜʰᵃᵗᵍᵖᵗ ˡᵒˡ</sup></sub>
+<sub><sup>ᴀʟʟ ᴛʜɪꜱ ꜱʜɪᴛ ᴍᴀᴅᴇ ʙʏ ᴍᴇ ɪꜱ ᴅᴏɴᴇ ᴡɪᴛʜ ᴄʜᴀᴛɢᴘᴛ</sup></sub>
