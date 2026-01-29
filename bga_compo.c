@@ -25,8 +25,7 @@ static int ends_with(const char *s, const char *ext)
   size_t ls = strlen(s);
   size_t le = strlen(ext);
   if (ls < le) return 0;
-  return _stricmp ? strcasecmp(s + ls - le, ext) == 0
-                  : strcasecmp(s + ls - le, ext) == 0;
+  return strcasecmp(s + ls - le, ext) == 0;
 }
 
 char *read_file(const char *path)
@@ -40,7 +39,7 @@ char *read_file(const char *path)
     long len = ftell(f);
     if (len <= 0) break;
     if (fseek(f, 0, SEEK_SET) != 0) break;
-    buf = (char *)malloc(len);
+    buf = malloc(len);
     if (!buf) break;
     if (fread(buf, len, 1, f) != 1) {
       free(buf);
@@ -94,10 +93,7 @@ int main(int argc, char **argv)
   }
   int is_audio = !is_video;
 
-  if (arg >= argc) {
-    fprintf(stderr, "Usage: %s [-v|-a] <BMS file>\n", argv[0]);
-    return 1;
-  }
+  if (arg >= argc) return 1;
 
   const char *bms_path = argv[arg];
 
@@ -108,47 +104,32 @@ int main(int argc, char **argv)
   if (sep) *(sep + 1) = 0;
   else { free(bms_dir); bms_dir = NULL; }
 
-  fprintf(stderr, "Loading chart\n");
   char *src = read_file(bms_path);
-  if (!src) {
-    fprintf(stderr, "Cannot read file %s\n", bms_path);
-    return 1;
-  }
+  if (!src) return 1;
 
   struct bm_chart chart;
-  int msgs = bm_load(&chart, src);
-  for (int i = 0; i < msgs; i++)
-    fprintf(stderr, "Log: Line %d: %s\n", bm_logs[i].line, bm_logs[i].message);
+  bm_load(&chart, src);
 
   int bw = -1, bh = -1;
   uint8_t *bitmaps[BM_INDEX_MAX] = {0};
 
   if (is_video) {
-    fprintf(stderr, "Loading bitmaps\n");
     for (int i = 0; i < BM_INDEX_MAX; i++) {
       const char *name = chart.tables.bmp[i];
       if (!name || !name[0]) continue;
-
-      if (!ends_with(name, ".bmp")) {
-        fprintf(stderr, "Skipping non-BMP bitmap %s\n", name);
-        continue;
-      }
+      if (!ends_with(name, ".bmp")) continue;
 
       char *path = strdupcat(bms_dir, name);
       int w, h;
       uint8_t *pix = stbi_load(path, &w, &h, NULL, 3);
       free(path);
 
-      if (!pix) {
-        fprintf(stderr, "Skipping unreadable bitmap %s\n", name);
-        continue;
-      }
+      if (!pix) continue;
 
       if (bw < 0) {
-        bw = w; bh = h;
-        fprintf(stderr, "Image size is %dx%d\n", w, h);
+        bw = w;
+        bh = h;
       } else if (w != bw || h != bh) {
-        fprintf(stderr, "Skipping bitmap %s (size mismatch %dx%d)\n", name, w, h);
         stbi_image_free(pix);
         continue;
       }
@@ -157,25 +138,21 @@ int main(int argc, char **argv)
     }
   }
 
-  const char *wave_exts[] = {
-    ".ogg",".wav",".mp3",".OGG",".WAV",".MP3"
-  };
+  const char *wave_exts[] = { ".ogg",".wav",".mp3",".OGG",".WAV",".MP3" };
 
-  struct wave { int16_t *pcm; int len, ptr; } waves[BM_INDEX_MAX] = {0};
+  struct wave { int16_t *pcm; int len, ptr; } waves[BM_INDEX_MAX];
+
+  for (int i = 0; i < BM_INDEX_MAX; i++) waves[i].ptr = -1;
 
   int ch = 2;
   int sr = 44100;
 
   if (is_audio) {
-    fprintf(stderr, "Loading waves\n");
     ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, ch, sr);
-
     for (int i = 0; i < BM_INDEX_MAX; i++) {
       if (!chart.tables.wav[i]) continue;
-
       char *ext = strrchr(chart.tables.wav[i], '.');
       if (ext) *ext = 0;
-
       for (int j = 0; j < 6; j++) {
         char *p = strdupcat3(bms_dir, chart.tables.wav[i], wave_exts[j]);
         ma_uint64 len;
@@ -251,8 +228,43 @@ int main(int argc, char **argv)
     if (ev.type == BM_TEMPO_CHANGE) tempo = ev.value_f;
     else if (ev.type == BM_BGA_BASE_CHANGE) bg = ev.value;
     else if (ev.type == BM_BGA_LAYER_CHANGE) fg = ev.value;
-    else if (ev.type == BM_NOTE || ev.type == BM_NOTE_LONG)
+    else if ((ev.type == BM_NOTE || ev.type == BM_NOTE_LONG) && is_audio)
       waves[ev.value].ptr = 0;
+  }
+
+  if (is_audio) {
+    int active;
+    do {
+      active = 0;
+      for (int i = 0; i < BM_INDEX_MAX; i++)
+        if (waves[i].ptr >= 0) active = 1;
+
+      if (!active) break;
+
+      time += 1.0 / fps;
+
+      int ns = (int)(time * sr - 1e-6) - samples;
+      if (ns > 0) {
+        int32_t *buf = calloc(ns * ch, sizeof(int32_t));
+        for (int w = 0; w < BM_INDEX_MAX; w++) {
+          if (waves[w].ptr < 0) continue;
+          for (int j = 0; j < ns && waves[w].ptr + j < waves[w].len; j++)
+            for (int c = 0; c < ch; c++)
+              buf[j*ch+c] += waves[w].pcm[(waves[w].ptr+j)*ch+c];
+          waves[w].ptr += ns;
+          if (waves[w].ptr >= waves[w].len) waves[w].ptr = -1;
+        }
+        for (int k = 0; k < ns*ch; k++) {
+          int32_t s = buf[k] >> 1;
+          if (s > INT16_MAX) s = INT16_MAX;
+          if (s < INT16_MIN) s = INT16_MIN;
+          putchar(s & 0xff);
+          putchar((s >> 8) & 0xff);
+        }
+        free(buf);
+      }
+      samples += ns;
+    } while (active);
   }
 
   return 0;
