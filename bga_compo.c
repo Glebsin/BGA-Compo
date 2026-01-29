@@ -1,6 +1,5 @@
 #include "bmflat.h"
 
-#define STBI_ONLY_BMP
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -13,41 +12,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 #ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
 #endif
 
-static int ends_with(const char *s, const char *ext)
-{
-  size_t ls = strlen(s);
-  size_t le = strlen(ext);
-  if (ls < le) return 0;
-  return strcasecmp(s + ls - le, ext) == 0;
-}
+static const char *img_exts[] = {
+  ".bmp", ".png", ".jpg", ".jpeg", ".gif",
+  ".BMP", ".PNG", ".JPG", ".JPEG", ".GIF"
+};
 
 char *read_file(const char *path)
 {
   FILE *f = fopen(path, "rb");
   if (!f) return NULL;
-
   char *buf = NULL;
-  do {
-    if (fseek(f, 0, SEEK_END) != 0) break;
-    long len = ftell(f);
-    if (len <= 0) break;
-    if (fseek(f, 0, SEEK_SET) != 0) break;
+  fseek(f, 0, SEEK_END);
+  long len = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if (len > 0) {
     buf = malloc(len);
-    if (!buf) break;
-    if (fread(buf, len, 1, f) != 1) {
-      free(buf);
-      buf = NULL;
-      break;
-    }
-  } while (0);
-
+    if (buf) fread(buf, len, 1, f);
+  }
   fclose(f);
   return buf;
 }
@@ -57,7 +44,6 @@ char *strdupcat(const char *a, const char *b)
   if (!a) return strdup(b);
   size_t la = strlen(a), lb = strlen(b);
   char *r = malloc(la + lb + 1);
-  if (!r) return NULL;
   memcpy(r, a, la);
   memcpy(r + la, b, lb);
   r[la + lb] = 0;
@@ -66,11 +52,11 @@ char *strdupcat(const char *a, const char *b)
 
 char *strdupcat3(const char *a, const char *b, const char *c)
 {
-  if (!a) return strdupcat(b, c);
-  size_t la = strlen(a), lb = strlen(b), lc = strlen(c);
+  size_t la = a ? strlen(a) : 0;
+  size_t lb = strlen(b);
+  size_t lc = strlen(c);
   char *r = malloc(la + lb + lc + 1);
-  if (!r) return NULL;
-  memcpy(r, a, la);
+  if (a) memcpy(r, a, la);
   memcpy(r + la, b, lb);
   memcpy(r + la + lb, c, lc);
   r[la + lb + lc] = 0;
@@ -81,19 +67,20 @@ int main(int argc, char **argv)
 {
 #ifdef _WIN32
   _setmode(_fileno(stdout), _O_BINARY);
-  _setmode(_fileno(stdin),  _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
 #endif
 
   int arg = 1;
   int is_video = 1;
-
   if (arg < argc && argv[arg][0] == '-') {
     if (argv[arg][1] == 'a') is_video = 0;
     arg++;
   }
   int is_audio = !is_video;
-
-  if (arg >= argc) return 1;
+  if (arg >= argc) {
+    fprintf(stderr, "Usage: %s [-v|-a] <BMS>\n", argv[0]);
+    return 1;
+  }
 
   const char *bms_path = argv[arg];
 
@@ -104,57 +91,89 @@ int main(int argc, char **argv)
   if (sep) *(sep + 1) = 0;
   else { free(bms_dir); bms_dir = NULL; }
 
+  fprintf(stderr, "Loading chart\n");
   char *src = read_file(bms_path);
-  if (!src) return 1;
+  if (!src) {
+    fprintf(stderr, "Cannot read %s\n", bms_path);
+    return 1;
+  }
 
   struct bm_chart chart;
-  bm_load(&chart, src);
+  int msgs = bm_load(&chart, src);
+  for (int i = 0; i < msgs; i++)
+    fprintf(stderr, "Log: Line %d: %s\n", bm_logs[i].line, bm_logs[i].message);
 
   int bw = -1, bh = -1;
   uint8_t *bitmaps[BM_INDEX_MAX] = {0};
 
   if (is_video) {
+    fprintf(stderr, "Loading images\n");
     for (int i = 0; i < BM_INDEX_MAX; i++) {
       const char *name = chart.tables.bmp[i];
       if (!name || !name[0]) continue;
-      if (!ends_with(name, ".bmp")) continue;
 
-      char *path = strdupcat(bms_dir, name);
-      int w, h;
-      uint8_t *pix = stbi_load(path, &w, &h, NULL, 3);
-      free(path);
+      char base[256];
+      strncpy(base, name, sizeof(base)-1);
+      base[sizeof(base)-1] = 0;
+      char *dot = strrchr(base, '.');
+      if (dot) *dot = 0;
 
-      if (!pix) continue;
+      uint8_t *pix = NULL;
+      int w = 0, h = 0;
+
+      for (int e = 0; e < (int)(sizeof(img_exts)/sizeof(img_exts[0])); e++) {
+        char *path = strdupcat3(bms_dir, base, img_exts[e]);
+        pix = stbi_load(path, &w, &h, NULL, 3);
+        free(path);
+        if (pix) break;
+      }
+
+      if (!pix) {
+        fprintf(stderr, "Failed to load image %s\n", name);
+        continue;
+      }
 
       if (bw < 0) {
-        bw = w;
-        bh = h;
+        bw = w; bh = h;
+        fprintf(stderr, "Image size %dx%d\n", w, h);
       } else if (w != bw || h != bh) {
+        fprintf(stderr, "Size mismatch %s (%dx%d)\n", name, w, h);
         stbi_image_free(pix);
         continue;
       }
 
       bitmaps[i] = pix;
     }
+
+    if (bw < 0 || bh < 0) {
+      fprintf(stderr, "No valid images loaded\n");
+      return 1;
+    }
   }
 
-  const char *wave_exts[] = { ".ogg",".wav",".mp3",".OGG",".WAV",".MP3" };
+  const char *wave_exts[] = {
+    ".ogg",".wav",".mp3",".OGG",".WAV",".MP3"
+  };
 
   struct wave { int16_t *pcm; int len, ptr; } waves[BM_INDEX_MAX];
-
   for (int i = 0; i < BM_INDEX_MAX; i++) waves[i].ptr = -1;
 
   int ch = 2;
   int sr = 44100;
 
   if (is_audio) {
+    fprintf(stderr, "Loading audio\n");
     ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, ch, sr);
     for (int i = 0; i < BM_INDEX_MAX; i++) {
       if (!chart.tables.wav[i]) continue;
-      char *ext = strrchr(chart.tables.wav[i], '.');
-      if (ext) *ext = 0;
-      for (int j = 0; j < 6; j++) {
-        char *p = strdupcat3(bms_dir, chart.tables.wav[i], wave_exts[j]);
+      char base[256];
+      strncpy(base, chart.tables.wav[i], sizeof(base)-1);
+      base[sizeof(base)-1] = 0;
+      char *dot = strrchr(base, '.');
+      if (dot) *dot = 0;
+
+      for (int e = 0; e < 6; e++) {
+        char *p = strdupcat3(bms_dir, base, wave_exts[e]);
         ma_uint64 len;
         if (ma_decode_file(p, &cfg, &len, (void**)&waves[i].pcm) == MA_SUCCESS) {
           waves[i].len = (int)len;
