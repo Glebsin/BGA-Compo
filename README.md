@@ -8,3 +8,8 @@ Working and compiled fork of - https://gist.github.com/ayuusweetfish/50764b32880
 3. Follow instructions in console
 
 **Tested on Windows 11, ffmpeg should be installed and added to PATH**
+
+
+# How to compile
+bga_compo_clean.exe - `gcc bga_compo.c bmflat.c stb_vorbis.c -O2 -o bga_compo_clean.exe`
+BGA_compo.exe - `python -m PyInstaller --onefile --add-binary "bga_compo_clean.exe;." --console render_bga.py`
