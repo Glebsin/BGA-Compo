@@ -3,7 +3,8 @@ Working and compiled fork of - https://gist.github.com/ayuusweetfish/50764b32880
 
 # HOW TO USE
 
-1. Drag & Drop .bme/.bms file on render_bga.exe
-2. Follow instructions in console
+1. Download [`BGA_compo.zip`](https://github.com/Glebsin/BGA-Compo/releases/download/2025.129.0/BGA_compo.zip) from Releases
+2. Drag & Drop .bme/.bms file on render_bga.exe
+3. Follow instructions in console
 
 **Tested on Windows 11, ffmpeg should be installed and added to PATH**
