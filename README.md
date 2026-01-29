@@ -3,7 +3,7 @@ Working and compiled fork of - https://gist.github.com/ayuusweetfish/50764b32880
 
 # HOW TO USE
 
-1. Download [`BGA_compo.zip`](https://github.com/Glebsin/BGA-Compo/releases/download/2025.129.0/BGA_compo.zip) from Releases and unzip `BGA_compo` folder
+1. Download [`BGA_compo.zip`](https://github.com/Glebsin/BGA-Compo/releases/download/2025.129.1/BGA_compo.zip) from Releases and unzip `BGA_compo` folder
 2. Drag & Drop .bme/.bms file on `BGA_compo.exe`
 3. Follow instructions in console
 
