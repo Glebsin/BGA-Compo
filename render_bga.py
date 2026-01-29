@@ -3,14 +3,19 @@ import subprocess
 from pathlib import Path
 import tempfile
 import shutil
+import os
 
 GREEN = "\033[92m"
 RESET = "\033[0m"
+
+BGA_COMPO_NAME = "bga_compo_clean.exe"
+
 
 def die(msg):
     print(msg)
     input("Press Enter to exit...")
     sys.exit(1)
+
 
 def ask_resolution():
     s = input("Enter BMP width and height (press Enter for 256x256): ").strip()
@@ -24,6 +29,7 @@ def ask_resolution():
     except:
         die("Invalid resolution format")
 
+
 if len(sys.argv) < 2:
     die("Drag and drop a .bms/.bme file onto this executable")
 
@@ -33,14 +39,15 @@ if not bme_path.exists():
 
 exe_dir = Path(sys.executable).parent
 
+# PyInstaller-safe embedded dir
 if hasattr(sys, "_MEIPASS"):
     embedded_dir = Path(sys._MEIPASS)
 else:
     embedded_dir = exe_dir
 
-embedded_bga = embedded_dir / "bga_compo.exe"
+embedded_bga = embedded_dir / BGA_COMPO_NAME
 if not embedded_bga.exists():
-    die("Embedded bga_compo.exe not found")
+    die(f"Embedded {BGA_COMPO_NAME} not found")
 
 WIDTH, HEIGHT = ask_resolution()
 
@@ -50,7 +57,7 @@ web_out = exe_dir / "out.mp4"
 with tempfile.TemporaryDirectory(prefix="bga_tmp_") as tmp:
     tmp = Path(tmp)
 
-    bga_compo = tmp / "bga_compo.exe"
+    bga_compo = tmp / BGA_COMPO_NAME
     shutil.copyfile(embedded_bga, bga_compo)
 
     video_raw = tmp / "video.rgb"
