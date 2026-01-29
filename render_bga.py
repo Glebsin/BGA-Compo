@@ -106,11 +106,11 @@ def run_ffmpeg_with_progress(cmd, total_ms, start_pct, end_pct):
 if len(sys.argv) < 2:
     die("Drag and drop a .bms/.bme file onto this executable")
 
-bms_path = Path(sys.argv[1]).resolve()
-if not bms_path.exists():
+orig_bms_path = Path(sys.argv[1]).resolve()
+if not orig_bms_path.exists():
     die("Input file not found")
 
-chart_dir_name = bms_path.parent.name
+chart_dir_name = orig_bms_path.parent.name
 
 exe_dir = Path(sys.executable).parent
 output_dir = exe_dir / chart_dir_name
@@ -132,23 +132,28 @@ vcodec, vcodec_opts = detect_encoder()
 with tempfile.TemporaryDirectory(prefix="bga_tmp_") as tmp:
     tmp = Path(tmp)
 
+    chart_tmp = tmp / "chart"
+    shutil.copytree(orig_bms_path.parent, chart_tmp)
+
+    bms_tmp = chart_tmp / orig_bms_path.name
+
     bga_compo = tmp / BGA_COMPO_NAME
     shutil.copyfile(embedded_bga, bga_compo)
 
     video_raw = tmp / "video.rgb"
     audio_raw = tmp / "audio.pcm"
-    temp_lossless = tmp / "temp_lossless.avi"
 
     with open(video_raw, "wb") as f:
-        subprocess.run([str(bga_compo), "-v", str(bms_path)], stdout=f, check=True)
+        subprocess.run([str(bga_compo), "-v", str(bms_tmp)], stdout=f, check=True)
 
     with open(audio_raw, "wb") as f:
-        subprocess.run([str(bga_compo), "-a", str(bms_path)], stdout=f, check=True)
+        subprocess.run([str(bga_compo), "-a", str(bms_tmp)], stdout=f, check=True)
 
     total_ms = int((audio_raw.stat().st_size / (44100 * 2 * 2)) * 1000)
 
+    draw_progress(0)
+
     if mode == "1":
-        draw_progress(0)
         run_ffmpeg_with_progress(
             [
                 "ffmpeg", "-y",
@@ -172,7 +177,6 @@ with tempfile.TemporaryDirectory(prefix="bga_tmp_") as tmp:
         print(f"\n{GREEN}Created:{RESET} {lossless_out}")
 
     if mode == "2":
-        draw_progress(0)
         run_ffmpeg_with_progress(
             [
                 "ffmpeg", "-y",
@@ -200,7 +204,6 @@ with tempfile.TemporaryDirectory(prefix="bga_tmp_") as tmp:
         print(f"\n{GREEN}Created:{RESET} {web_out}")
 
     if mode == "3":
-        draw_progress(0)
         run_ffmpeg_with_progress(
             [
                 "ffmpeg", "-y",
@@ -238,6 +241,7 @@ with tempfile.TemporaryDirectory(prefix="bga_tmp_") as tmp:
             ],
             total_ms, 50, 100
         )
+
         print(f"\n{GREEN}Created:{RESET} {lossless_out}")
         print(f"{GREEN}Created:{RESET} {web_out}")
 
